@@ -1,35 +1,35 @@
 import os
 from dotenv import load_dotenv
 import requests
+from urllib.parse import urlparse
+
+
+class VKAPIError(Exception):
+    pass
 
 
 def shorten_link(token, url):
     api_url = "https://api.vk.com/method/utils.getShortLink"
-
     params = {
         "access_token": token,
         "url": url,
         "private": "0",
         "v": "5.199"
     }
+    response = requests.get(api_url, params=params).json()
 
-    response = requests.get(api_url, params=params)
-    data = response.json()
+    if "error" in response:
+        raise VKAPIError(
+            f"Ошибка: {response['error']['error_msg']}"
+        )
 
-    if "error" in data:
-        return "Ошибка: Некорректный URL."
-
-    return data["response"]["short_url"]
+    return response["response"]["short_url"]
 
 
 def count_clicks(token, shortened_url):
-    if "Ошибка" in shortened_url:
-        return "Не могу получить статистику: Некорректная сокращенная ссылка."
-
-    key = shortened_url.split("vk.cc/")[1]
+    key = extract_key_from_url(shortened_url)
 
     api_url = "https://api.vk.com/method/utils.getLinkStats"
-
     params = {
         "access_token": token,
         "key": key,
@@ -38,34 +38,45 @@ def count_clicks(token, shortened_url):
         "v": "5.199"
     }
 
-    response = requests.get(api_url, params=params)
-    clicks = response.json()
+    response = requests.get(api_url, params=params).json()
 
-    if "response" in clicks and "stats" in clicks["response"]:
-        stats = clicks["response"]["stats"]
-        if stats:
-            return stats[0]["views"]
+    if "error" in response:
+        raise VKAPIError(
+            f"Ошибка: {response['error']['error_msg']}"
+        )
 
-
-def is_short_url(url):
-    return "vk.cc/" in url
+    return response.get("response", {}).get("stats", [{}])[0].get(
+        "views", None
+    )
 
 
 def main():
-    url = input("Введите длинную ссылку: ")
-
     load_dotenv()
-    token = os.getenv("VK_TOKEN")
+    token = os.environ["VK_TOKEN"]
 
-    if is_short_url(url):
-        click_count = count_clicks(token, url)
-        print("Количество кликов по ссылке:", click_count)
-    else:
-        shortened_url = shorten_link(token, url)
-        print("Сокращенная ссылка:", shortened_url)
-        if "Ошибка" not in shortened_url:
-            click_count = count_clicks(token, shortened_url)
-            print("Количество кликов по ссылке:", click_count)
+    url = input("Введите ссылку: ")
+
+    try:
+        if is_short_url(url):
+            clicks = count_clicks(token, url)
+            print(
+                "Количество кликов по ссылке:",
+                clicks or "Статистики пока нет."
+            )
+        else:
+            shortened_url = shorten_link(token, url)
+            print("Сокращенная ссылка:", shortened_url)
+
+    except VKAPIError as error:
+        print(error)
+
+
+def is_short_url(url):
+    return urlparse(url).netloc == "vk.cc"
+
+
+def extract_key_from_url(url):
+    return urlparse(url).path.lstrip('/')
 
 
 if __name__ == "__main__":
