@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 import requests
 from urllib.parse import urlparse
+import argparse
 
 
 class VKAPIError(Exception):
@@ -57,7 +58,12 @@ def main():
     load_dotenv()
     token = os.environ["VK_TOKEN"]
 
-    url = input("Введите ссылку: ")
+    parser = argparse.ArgumentParser(
+        description="Сократить URL или получить статистику кликов через VK API"
+    )
+    parser.add_argument("url", help="URL для сокращения или проверки")
+    args = parser.parse_args()
+    url = args.url
 
     try:
         if is_shorten_link(token, url):
